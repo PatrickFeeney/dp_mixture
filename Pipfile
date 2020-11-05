@@ -10,6 +10,7 @@ autopep8 = "*"
 numpy = "*"
 matplotlib = "*"
 pytest = "*"
+scipy = "*"
 
 [requires]
 python_version = "3.8"
