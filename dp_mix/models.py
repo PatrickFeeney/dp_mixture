@@ -1,12 +1,14 @@
+import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
 import numpy as np
 from scipy.special import softmax
-from scipy.stats import zscore, multivariate_normal as mv_norm
+from scipy.stats import multivariate_normal as mv_norm
 
 
 class DPMix:
     def __init__(self, data, truncation, obs_param, allo_param, allo_hyper, obs_prior):
         # x
-        self.data = zscore(data)
+        self.data = data
         # K
         self.truncation = truncation
         # {tau hat sub k, nu hat sub k} for k=1 to K
@@ -26,14 +28,18 @@ class DPMix:
         # local step
         # C
         # approximation of prior mean from Eq. 2.51
-        log_cluster_weight = mv_norm.logpdf(self.data, self.obs_count / self.obs_shape)
+        # TODO use actual distribution instead of approximation
+        cluster_means = self.obs_mean()
+        log_cluster_weight = np.asarray([mv_norm.logpdf(self.data, cluster_means[i])
+                                         for i in range(self.truncation)]).T
         # from Eq. 3.17-18
         log_u_hat = np.log(self.allo_param[:, 1] / np.sum(self.allo_param, axis=1))
         # W
         log_post_weight = log_cluster_weight + \
-            np.asarray([log_u_hat[i] + np.sum(1 - log_u_hat[:i]) for i in range(self.truncation)])
+            np.asarray([[log_u_hat[i] + np.sum(1 - log_u_hat[:i])
+                        for i in range(self.truncation)]])
         # r hat
-        resp = softmax(log_post_weight, axis=1)
+        resp = softmax(log_post_weight, axis=0)
 
         # summary step
         # S
@@ -52,3 +58,20 @@ class DPMix:
         # eta hat
         self.allo_param[:, 0] = count_gt + self.allo_hyper
         self.allo_param[:, 1] = count + 1
+
+    def plot_data(self):
+        # scatter plot of data
+        plt.scatter(self.data[:, 0], self.data[:, 1])
+        # scatter plot of cluster means
+        cluster_means = self.obs_mean()
+        plt.scatter(cluster_means[:, 0], cluster_means[:, 1], c="red")
+        # ellipses for 1 STD around cluster
+        ax = plt.gca()
+        for i in range(self.truncation):
+            std_ellipse = Ellipse((cluster_means[i, 0], cluster_means[i, 1]), 1, 1,
+                                  color="red", alpha=.25)
+            ax.add_patch(std_ellipse)
+        plt.show()
+
+    def obs_mean(self):
+        return self.obs_count / self.obs_shape[:, np.newaxis]
