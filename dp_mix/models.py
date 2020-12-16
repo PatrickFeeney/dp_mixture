@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import numpy as np
 from scipy.special import softmax, digamma
-from scipy.stats import multivariate_normal as mv_norm
 
 
 class DPMix:
@@ -65,11 +64,12 @@ class DPMix:
 
     def responsibility(self):
         # C
-        # approximation of prior mean from Eq. 2.51
-        # TODO use actual distribution instead of approximation
+        # np.sum(obs_shape) should become np.trace if full covariance matrix is used
         cluster_means = self.obs_mean()
-        log_cluster_weight = np.asarray([mv_norm.logpdf(self.data, cluster_means[i])
-                                         for i in range(self.truncation)]).T
+        log_cluster_weight = np.log(1/(2 * np.math.pi)) \
+            - np.sum(self.data * self.data, axis=1, keepdims=True)/2 \
+            + self.data @ cluster_means.T \
+            - (np.sum(cluster_means * cluster_means, axis=1) + np.sum(self.obs_shape))/2
         # expectations over Dirichlet
         log_u = digamma(self.allo_param[:, 1]) - digamma(np.sum(self.allo_param, axis=1))
         log_1_minus_u = digamma(self.allo_param[:, 0]) - digamma(np.sum(self.allo_param, axis=1))
@@ -86,7 +86,7 @@ class DPMix:
         # data loss
         data_loss = 0
         # entropy loss
-        entropy_loss = -1 * np.sum(resp * np.log(resp))
+        entropy_loss = -1 * np.sum(resp * np.log(resp + 1e-10))
         # DP allocation loss
         dp_alloc_loss = 0
         return data_loss + entropy_loss + dp_alloc_loss
