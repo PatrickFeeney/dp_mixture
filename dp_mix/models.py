@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import numpy as np
-from scipy.special import softmax, digamma
+from scipy.special import softmax, digamma, loggamma
 
 
 class DPMix:
@@ -22,18 +22,15 @@ class DPMix:
         self.N = self.data.shape[0]
         # D
         self.D = self.data.shape[1]
+        # fixed variance for Gaussian prior
+        self.prior_fixed_var = 1
+        # fixed variance for Gaussian likelihood
+        self.like_fixed_var = 1
 
     def _update(self):
-        # local step
-        resp = self.responsibility()
-
-        # summary step
-        # S
-        weighted_stat = self.data.T @ resp
-        # N
-        count = np.sum(resp, axis=0)
-        # N greater than subscript
-        count_gt = np.asarray([np.sum(count[i+1:]) for i in range(self.truncation)])
+        # summary step, from results of local step
+        # S, N, N greater than subscript
+        weighted_stat, count, count_gt = self.resp_summary()
 
         # global step for observation params
         # tau hat
@@ -44,6 +41,8 @@ class DPMix:
         # eta hat
         self.allo_param[:, 0] = count_gt + self.allo_hyper
         self.allo_param[:, 1] = count + 1
+        # print objective
+        print(self.objective())
 
     def plot_data(self):
         # scatter plot of data
@@ -71,8 +70,7 @@ class DPMix:
             + self.data @ cluster_means.T \
             - (np.sum(cluster_means * cluster_means, axis=1) + np.sum(self.obs_shape))/2
         # expectations over Dirichlet
-        log_u = digamma(self.allo_param[:, 1]) - digamma(np.sum(self.allo_param, axis=1))
-        log_1_minus_u = digamma(self.allo_param[:, 0]) - digamma(np.sum(self.allo_param, axis=1))
+        log_u, log_1_minus_u = self.dirichlet_expectation()
         # W
         log_post_weight = log_cluster_weight + \
             np.asarray([[log_u[i] + np.sum(log_1_minus_u[:i])
@@ -80,13 +78,73 @@ class DPMix:
         # r hat
         return softmax(log_post_weight, axis=0)
 
-    # TODO implement objective function
     def objective(self):
+        # r hat
         resp = self.responsibility()
-        # data loss
-        data_loss = 0
-        # entropy loss
+        # S, N, N greater than subscript
+        weighted_stat, count, count_gt = self.resp_summary()
+        # data loss from Eq 3.26
+        data_loss = np.sum(self.ref_measure()) \
+            + np.sum(self.prior_cumulant(self.prior_count, self.prior_shape)
+                     - self.prior_cumulant(self.obs_count, self.obs_shape)) \
+            + np.sum((count + self.prior_shape - self.obs_shape) * -1 *
+                     self.likelihood_cumulant_expectation()) \
+            + np.sum((count_gt + self.prior_count - self.obs_shape) * self.prior_count)
+
+        # entropy loss from Eq 3.29
         entropy_loss = -1 * np.sum(resp * np.log(resp + 1e-10))
-        # DP allocation loss
-        dp_alloc_loss = 0
+
+        # expectations over Dirichlet
+        log_u, log_1_minus_u = self.dirichlet_expectation()
+        # DP allocation loss from Eq 3.31
+        dp_alloc_loss = np.sum(
+            self.beta_cumulant(1, self.allo_hyper)
+            - self.beta_cumulant(self.allo_param[:, 1], self.allo_param[:, 0])
+            + (count + 1 - self.allo_param[:, 1]) * log_u
+            + (count_gt + self.allo_hyper - self.allo_param[:, 0]) * log_1_minus_u
+        )
         return data_loss + entropy_loss + dp_alloc_loss
+
+    def dirichlet_expectation(self):
+        # expectations from Eq 3.32-33
+        log_u = digamma(self.allo_param[:, 1]) - digamma(np.sum(self.allo_param, axis=1))
+        log_1_minus_u = digamma(self.allo_param[:, 0]) - digamma(np.sum(self.allo_param, axis=1))
+        return log_u, log_1_minus_u
+
+    def beta_cumulant(self, alpha, beta):
+        # cumulant function for beta distribution from Eq 3.34
+        return loggamma(beta + alpha) - loggamma(beta) - loggamma(alpha)
+
+    def resp_summary(self):
+        # local step
+        resp = self.responsibility()
+        # summary step
+        # S
+        weighted_stat = self.data.T @ resp
+        # N
+        count = np.sum(resp, axis=0)
+        # N greater than subscript
+        count_gt = np.asarray([np.sum(count[i+1:]) for i in range(self.truncation)])
+        return weighted_stat, count, count_gt
+
+    def prior_cumulant(self, count, shape):
+        # cumulant function for Gaussian prior for fixed-variance Gaussian likelihood
+        # from Eq 2.49
+        return (
+            (count ** 2)/(self.prior_fixed_var * shape)
+            - np.log(self.prior_fixed_var * shape)
+            + np.log(2 * np.math.pi)
+        )/2
+
+    def likelihood_cumulant_expectation(self):
+        # expectation of Eq 2.24 for Gaussian with fixed variance and mean drawn from
+        # Gaussian with 0 mean and fixed variance
+        return self.like_fixed_var * self.prior_fixed_var / 2
+
+    def ref_measure(self):
+        # reference measure for Gaussian with known variance from Eq 2.24
+        return (
+            (self.data ** 2)/self.like_fixed_var
+            + np.log(self.like_fixed_var)
+            + np.log(2 * np.math.pi)
+        )/-2
