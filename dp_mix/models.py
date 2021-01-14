@@ -83,26 +83,24 @@ class DPMix:
         resp = self.responsibility()
         # S, N, N greater than subscript
         weighted_stat, count, count_gt = self.resp_summary()
-        # data loss from Eq 3.26
+        # simplified data loss from Eq 3.42
         data_loss = np.sum(self.ref_measure()) \
             + np.sum(self.prior_cumulant(self.prior_count, self.prior_shape)
-                     - self.prior_cumulant(self.obs_count, self.obs_shape)) \
-            + np.sum((count + self.prior_shape - self.obs_shape) * -1 *
-                     self.likelihood_cumulant_expectation()) \
-            + np.sum((count_gt + self.prior_count - self.obs_shape) * self.prior_count)
+                     - self.prior_cumulant(self.obs_count, self.obs_shape))
 
         # entropy loss from Eq 3.29
         entropy_loss = -1 * np.sum(resp * np.log(resp + 1e-10))
 
-        # expectations over Dirichlet
-        log_u, log_1_minus_u = self.dirichlet_expectation()
-        # DP allocation loss from Eq 3.31
+        # simplified DP allocation loss from Eq 3.44
         dp_alloc_loss = np.sum(
             self.beta_cumulant(1, self.allo_hyper)
             - self.beta_cumulant(self.allo_param[:, 1], self.allo_param[:, 0])
-            + (count + 1 - self.allo_param[:, 1]) * log_u
-            + (count_gt + self.allo_hyper - self.allo_param[:, 0]) * log_1_minus_u
         )
+        print()
+        print(data_loss)
+        print(entropy_loss)
+        print(dp_alloc_loss)
+        print()
         return data_loss + entropy_loss + dp_alloc_loss
 
     def dirichlet_expectation(self):
@@ -131,20 +129,15 @@ class DPMix:
         # cumulant function for Gaussian prior for fixed-variance Gaussian likelihood
         # from Eq 2.49
         return (
-            (count ** 2)/(self.prior_fixed_var * shape)
+            np.sum(count * count, keepdims=True)/(self.prior_fixed_var * shape)
             - np.log(self.prior_fixed_var * shape)
             + np.log(2 * np.math.pi)
         )/2
 
-    def likelihood_cumulant_expectation(self):
-        # expectation of Eq 2.24 for Gaussian with fixed variance and mean drawn from
-        # Gaussian with 0 mean and fixed variance
-        return self.like_fixed_var * self.prior_fixed_var / 2
-
     def ref_measure(self):
         # reference measure for Gaussian with known variance from Eq 2.24
         return (
-            (self.data ** 2)/self.like_fixed_var
+            np.sum(self.data * self.data, axis=1, keepdims=True)/self.like_fixed_var
             + np.log(self.like_fixed_var)
             + np.log(2 * np.math.pi)
         )/-2
