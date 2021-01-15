@@ -118,7 +118,7 @@ class DPMix:
         resp = self.responsibility()
         # summary step
         # S
-        weighted_stat = (self.data.T @ resp).T
+        weighted_stat = resp.T @ self.data
         # N
         count = np.sum(resp, axis=0)
         # N greater than subscript
