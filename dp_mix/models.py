@@ -75,8 +75,8 @@ class DPMix:
         log_post_weight = log_cluster_weight + \
             np.asarray([[log_u[i] + np.sum(log_1_minus_u[:i])
                         for i in range(self.truncation)]])
-        # r hat
-        return softmax(log_post_weight, axis=0)
+        # r hat from Eq 3.49
+        return softmax(log_post_weight, axis=1)
 
     def objective(self):
         # r hat
@@ -118,7 +118,7 @@ class DPMix:
         resp = self.responsibility()
         # summary step
         # S
-        weighted_stat = self.data.T @ resp
+        weighted_stat = (self.data.T @ resp).T
         # N
         count = np.sum(resp, axis=0)
         # N greater than subscript
