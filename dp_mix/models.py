@@ -128,19 +128,21 @@ class DPMix:
     def prior_cumulant(self, count, shape):
         # cumulant function for univariate Gaussian prior for fixed-variance Gaussian likelihood
         # from Eq 2.49
-        # TODO verify modification for multivariate case
+        # modified for multivariate case
+        # change shape from (K) vector to (K, 1) matrix
+        shape = shape[:, np.newaxis]
         return (
-            np.sum(count * count, axis=1, keepdims=True)
-            / (self.prior_fixed_var * shape[:, np.newaxis])
-            - np.log(self.prior_fixed_var * shape[:, np.newaxis])
-            + 2 * np.log(2 * np.math.pi)
+            self.D * np.log(2 * np.math.pi)
+            - self.D * np.log(shape)
+            + self.D * np.log(self.prior_fixed_var)
+            + np.sum(count ** 2, axis=1, keepdims=True) * self.prior_fixed_var / shape
         )/2
 
     def ref_measure(self):
         # reference measure for univariate Gaussian with known variance from Eq 2.24
-        # TODO verify modification for multivariate case
+        # modified for multivariate case
         return (
-            np.sum(self.data * self.data, axis=1, keepdims=True)/self.like_fixed_var
-            + np.log(self.like_fixed_var ** 2)
-            + 2 * np.log(2 * np.math.pi)
+            np.sum(self.data ** 2, axis=1, keepdims=True)/self.like_fixed_var
+            - self.D * np.log(self.like_fixed_var)
+            + self.D * np.log(2 * np.math.pi)
         )/-2
