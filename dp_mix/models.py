@@ -11,13 +11,13 @@ class DPMix:
         # K
         self.truncation = truncation
         # {tau hat sub k, nu hat sub k} for k=1 to K
-        self.obs_count, self.obs_shape = obs_param
+        self.obs_shape, self.obs_count = obs_param
         # {eta hat sub k} for k=1 to K
         self.allo_param = allo_param
         # gamma
         self.allo_hyper = allo_hyper
         # {tau bar, nu bar}
-        self.prior_count, self.prior_shape = obs_prior
+        self.prior_shape, self.prior_count = obs_prior
         # N
         self.N = self.data.shape[0]
         # D
@@ -34,9 +34,9 @@ class DPMix:
 
         # global step for observation params
         # tau hat
-        self.obs_count = weighted_stat + self.prior_count
+        self.obs_shape = weighted_stat + self.prior_shape
         # nu hat
-        self.obs_shape = count + self.prior_shape
+        self.obs_count = count + self.prior_count
         # global step for allocation params
         # eta hat
         self.allo_param[:, 0] = count_gt + self.allo_hyper
@@ -59,16 +59,16 @@ class DPMix:
         plt.show()
 
     def obs_mean(self):
-        return self.obs_count / self.obs_shape[:, np.newaxis]
+        return self.obs_shape / self.obs_count[:, np.newaxis]
 
     def responsibility(self):
         # C
-        # np.sum(obs_shape) should become np.trace if full covariance matrix is used
+        # np.sum(obs_count) should become np.trace if full covariance matrix is used
         cluster_means = self.obs_mean()
         log_cluster_weight = np.log(1/(2 * np.math.pi)) \
             - np.sum(self.data * self.data, axis=1, keepdims=True)/2 \
             + self.data @ cluster_means.T \
-            - (np.sum(cluster_means * cluster_means, axis=1) + np.sum(self.obs_shape))/2
+            - (np.sum(cluster_means * cluster_means, axis=1) + np.sum(self.obs_count))/2
         # expectations over Dirichlet
         log_u, log_1_minus_u = self.dirichlet_expectation()
         # W
@@ -85,8 +85,8 @@ class DPMix:
         weighted_stat, count, count_gt = self.resp_summary()
         # simplified data loss from Eq 3.42
         data_loss = np.sum(self.ref_measure()) \
-            + np.sum(self.prior_cumulant(self.prior_count, self.prior_shape)
-                     - self.prior_cumulant(self.obs_count, self.obs_shape))
+            + np.sum(self.prior_cumulant(self.prior_shape, self.prior_count)
+                     - self.prior_cumulant(self.obs_shape, self.obs_count))
 
         # entropy loss from Eq 3.29
         entropy_loss = -1 * np.sum(resp * np.log(resp + 1e-10))
@@ -125,17 +125,17 @@ class DPMix:
         count_gt = np.asarray([np.sum(count[i+1:]) for i in range(self.truncation)])
         return weighted_stat, count, count_gt
 
-    def prior_cumulant(self, count, shape):
+    def prior_cumulant(self, shape, count):
         # cumulant function for univariate Gaussian prior for fixed-variance Gaussian likelihood
         # from Eq 2.49
         # modified for multivariate case
-        # change shape from (K) vector to (K, 1) matrix
-        shape = shape[:, np.newaxis]
+        # change count from (K) vector to (K, 1) matrix
+        count = count[:, np.newaxis]
         return (
             self.D * np.log(2 * np.math.pi)
-            - self.D * np.log(shape)
+            - self.D * np.log(count)
             + self.D * np.log(self.prior_fixed_var)
-            + np.sum(count ** 2, axis=1, keepdims=True) * self.prior_fixed_var / shape
+            + np.sum(shape ** 2, axis=1, keepdims=True) * self.prior_fixed_var / count
         )/2
 
     def ref_measure(self):
