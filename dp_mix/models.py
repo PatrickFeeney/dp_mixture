@@ -41,8 +41,8 @@ class DPMix:
         # eta hat
         self.allo_param[:, 0] = count_gt + self.allo_hyper
         self.allo_param[:, 1] = count + 1
-        # print objective
-        print(self.objective())
+        # print objective, should outperform N([0, 0], I2) which has logpdf -771.9025620633421
+        print("Objective: " + str(self.objective()))
 
     def plot_data(self):
         # scatter plot of data
@@ -84,9 +84,10 @@ class DPMix:
         # S, N, N greater than subscript
         weighted_stat, count, count_gt = self.resp_summary()
         # simplified data loss from Eq 3.42
-        data_loss = np.sum(self.ref_measure()) \
-            + np.sum(self.prior_cumulant(self.prior_shape, self.prior_count)
-                     - self.prior_cumulant(self.obs_shape, self.obs_count))
+        ref_sum = np.sum(self.ref_measure())
+        cum_dif = np.sum(self.prior_cumulant(self.obs_shape, self.obs_count)
+                         - self.prior_cumulant(self.prior_shape, self.prior_count))
+        data_loss = ref_sum + cum_dif
 
         # entropy loss from Eq 3.29
         entropy_loss = -1 * np.sum(resp * np.log(resp + 1e-10))
@@ -97,9 +98,12 @@ class DPMix:
             - self.beta_cumulant(self.allo_param[:, 1], self.allo_param[:, 0])
         )
         print()
-        print(data_loss)
-        print(entropy_loss)
-        print(dp_alloc_loss)
+        print()
+        print("Data Loss: " + str(data_loss))
+        print("\tRef Measure: " + str(ref_sum))
+        print("\tPrior Cumulant: " + str(cum_dif))
+        print("Entropy Loss: " + str(entropy_loss))
+        print("DP Alloc Loss: " + str(dp_alloc_loss))
         print()
         return data_loss + entropy_loss + dp_alloc_loss
 
@@ -143,6 +147,6 @@ class DPMix:
         # modified for multivariate case
         return (
             np.sum(self.data ** 2, axis=1, keepdims=True)/self.like_fixed_var
-            - self.D * np.log(self.like_fixed_var)
+            + self.D * np.log(self.like_fixed_var)
             + self.D * np.log(2 * np.math.pi)
         )/-2

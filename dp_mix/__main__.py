@@ -13,4 +13,4 @@ dp_mix = models.DPMix(data, K, (init_means, np.asarray([1] * K)),
 dp_mix.plot_data()
 for i in range(10):
     dp_mix._update()
-    dp_mix.plot_data()
+dp_mix.plot_data()
