@@ -17,3 +17,7 @@ To run unit tests, run the following command:
 ```
 pipenv run python -m pytest
 ```
+
+## Example Output
+Example output from running the module:
+![Visualization of model objectives.](figures/Figure_1.png)
