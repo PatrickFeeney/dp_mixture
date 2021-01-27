@@ -29,6 +29,8 @@ class DPMix:
 
     def _update(self):
         # summary step, from results of local step
+        # r hat
+        resp = self.responsibility()
         # S, N, N greater than subscript
         weighted_stat, count, count_gt = self.resp_summary()
 
@@ -42,7 +44,9 @@ class DPMix:
         self.allo_param[:, 0] = count_gt + self.allo_hyper
         self.allo_param[:, 1] = count + 1
         # print objective, should outperform N([0, 0], I2) which has logpdf -771.9025620633421
-        print("Objective: " + str(self.objective()))
+        objective_val = self.objective(resp, weighted_stat, count, count_gt)
+        print("Objective: " + str(objective_val))
+        return objective_val
 
     def plot_data(self):
         # scatter plot of data
@@ -78,11 +82,7 @@ class DPMix:
         # r hat from Eq 3.49
         return softmax(log_post_weight, axis=1)
 
-    def objective(self):
-        # r hat
-        resp = self.responsibility()
-        # S, N, N greater than subscript
-        weighted_stat, count, count_gt = self.resp_summary()
+    def objective(self, resp, weighted_stat, count, count_gt):
         # simplified data loss from Eq 3.42
         ref_sum = np.sum(self.ref_measure())
         cum_dif = np.sum(self.prior_cumulant(self.obs_shape, self.obs_count)
